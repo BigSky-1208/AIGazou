@@ -87,6 +87,10 @@ def crawl():
     data = request.json
     keyword = data.get('keyword')
     max_num = int(data.get('max_num', 10))
+    
+    # --- フィルタリング条件 ---
+    MIN_PERSONS = 3
+    MAX_PERSONS = 15
 
     if not keyword:
         return jsonify({'status': 'error', 'message': 'キーワードが入力されていません。'}), 400
@@ -104,23 +108,57 @@ def crawl():
         google_crawler = GoogleImageCrawler(storage={'root_dir': save_path})
         
         # クロール実行
+        print(f"収集を開始: キーワード='{keyword}', 最大枚数={max_num}")
         google_crawler.crawl(keyword=keyword, max_num=max_num)
+        print("収集が完了。フィルタリングを開始します。")
+
+        # --- ここからAIフィルタリング処理 ---
         
+        valid_images = []
+        total_images = 0
+        
+        # ダウンロードした画像を1枚ずつチェック
+        image_files = [f for f in os.listdir(save_path) if os.path.isfile(os.path.join(save_path, f))]
+        total_images = len(image_files)
+
+        for filename in image_files:
+            image_path = os.path.join(save_path, filename)
+            
+            # 人数をカウント
+            person_count = count_persons_in_image(image_path)
+            print(f"ファイル: {filename}, 検出人数: {person_count}")
+            
+            # 人数が条件範囲内かチェック
+            if MIN_PERSONS <= person_count <= MAX_PERSONS:
+                valid_images.append(filename) # 条件に合えばリストに追加
+            else:
+                os.remove(image_path) # 条件に合わなければ削除
+
+        print(f"フィルタリング完了。有効な画像数: {len(valid_images)} / {total_images}")
+        # --- ここまでAIフィルタリング処理 ---
+        
+        # 有効な画像が1枚もなかった場合の処理
+        if not valid_images:
+            return jsonify({
+                'status': 'success',
+                'message': f'{total_images}枚収集しましたが、条件（{MIN_PERSONS}〜{MAX_PERSONS}人）に合う画像が見つかりませんでした。',
+                'downloadUrl': None
+            })
+
         # ZIPファイルを作成
         zip_filename = f"{session_id}_{keyword.replace(' ', '_')}.zip"
         zip_filepath = os.path.join(ZIP_FOLDER, zip_filename)
         
         with zipfile.ZipFile(zip_filepath, 'w') as zipf:
-            for root, _, files in os.walk(save_path):
-                for file in files:
-                    zipf.write(os.path.join(root, file), arcname=file)
+            for image_file in valid_images:
+                zipf.write(os.path.join(save_path, image_file), arcname=image_file)
 
         # ダウンロード用のURLを生成
         download_url = f'/download/{zip_filename}'
         
         return jsonify({
             'status': 'success',
-            'message': f'画像の収集が完了しました。下のリンクからダウンロードしてください。',
+            'message': f'{total_images}枚中 {len(valid_images)}枚の画像を収集しました。下のリンクからダウンロードしてください。',
             'downloadUrl': download_url
         })
 
