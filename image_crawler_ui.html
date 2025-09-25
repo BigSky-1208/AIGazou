@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI画像収集ツール</title>
-    <!-- Tailwind CSS を読み込んで、簡単に見た目を整えます -->
+    <title>AI画像収集・フィルタリングツール</title>
+    <!-- Tailwind CSS を読み込みます -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 簡単なスタイル調整 */
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
         }
-        /* スピナー（ローディングアニメーション）のスタイル */
         .loader {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #3498db;
@@ -25,110 +23,151 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* ギャラリーのスタイル */
+        .gallery-item {
+            transition: transform 0.2s ease-in-out;
+        }
+        .gallery-item:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
 
-    <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 md:p-12 my-8">
+    <div class="w-full max-w-3xl bg-white rounded-xl shadow-lg p-8 md:p-12 my-8">
         
         <div class="text-center mb-8">
-            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">AI画像収集ツール</h1>
-            <p class="text-gray-500 mt-2">キーワードと枚数を入力して、画像収集を開始します。</p>
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">AI画像収集・フィルタリングツール</h1>
+            <p class="text-gray-500 mt-2">条件を指定して、AIによる画像フィルタリングを開始します。</p>
         </div>
 
-        <!-- ここにキーワードや枚数を入力するフォームを作ります -->
+        <!-- 入力フォーム -->
         <div id="crawl-form" class="space-y-6">
             <div>
                 <label for="keyword" class="block text-sm font-medium text-gray-700 mb-1">検索キーワード</label>
-                <input type="text" id="keyword" name="keyword" placeholder="例: カフェにいる人々"
-                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+                <input type="text" id="keyword" placeholder="例: カフェにいる人々"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label for="max_num" class="block text-sm font-medium text-gray-700 mb-1">最大収集枚数</label>
+                    <input type="number" id="max_num" value="20" min="1"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="min_persons" class="block text-sm font-medium text-gray-700 mb-1">最低人数</label>
+                    <input type="number" id="min_persons" value="3" min="1"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="max_persons" class="block text-sm font-medium text-gray-700 mb-1">最大人数</label>
+                    <input type="number" id="max_persons" value="15" min="1"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
             </div>
 
             <div>
-                <label for="max_num" class="block text-sm font-medium text-gray-700 mb-1">収集する枚数</label>
-                <input type="number" id="max_num" name="max_num" value="10" min="1"
-                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
-            </div>
-
-            <div>
-                <button id="submit-button" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out flex items-center justify-center">
-                    <span id="button-text">収集を開始</span>
+                <button id="submit-button" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-150 flex items-center justify-center">
+                    <span id="button-text">収集とフィルタリングを開始</span>
                 </button>
             </div>
         </div>
 
-        <!-- 処理状況を表示するエリア -->
-        <div id="status" class="mt-8 text-center text-gray-600">
-            <!-- ここに「収集中...」や「完了しました」などのメッセージが表示されます -->
+        <!-- 処理状況と結果表示エリア -->
+        <div id="status-area" class="mt-8 text-center text-gray-600"></div>
+        <div id="results-area" class="mt-6 hidden">
+            <div id="result-message" class="text-center font-semibold mb-4"></div>
+            <div id="download-button-area" class="text-center mb-6"></div>
+            <div id="gallery" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                <!-- ここに収集した画像が表示されます -->
+            </div>
         </div>
-
     </div>
 
-    <!-- ここからが追加・変更部分です -->
     <script>
-        // HTMLの要素を取得します
         const submitButton = document.getElementById('submit-button');
         const buttonText = document.getElementById('button-text');
         const keywordInput = document.getElementById('keyword');
         const maxNumInput = document.getElementById('max_num');
-        const statusDiv = document.getElementById('status');
+        const minPersonsInput = document.getElementById('min_persons');
+        const maxPersonsInput = document.getElementById('max_persons');
+        
+        const statusArea = document.getElementById('status-area');
+        const resultsArea = document.getElementById('results-area');
+        const resultMessage = document.getElementById('result-message');
+        const downloadButtonArea = document.getElementById('download-button-area');
+        const gallery = document.getElementById('gallery');
 
-        // 「収集を開始」ボタンがクリックされたときの処理
         submitButton.addEventListener('click', async () => {
             const keyword = keywordInput.value;
-            const max_num = maxNumInput.value;
-
-            // キーワードが空の場合は処理を中断
             if (!keyword) {
                 alert('キーワードを入力してください。');
                 return;
             }
 
-            // --- 通信中のUI変更 ---
-            statusDiv.innerHTML = '<div class="flex justify-center items-center"><div class="loader mr-3"></div><span>収集中です...しばらくお待ちください。</span></div>';
+            // UIをリセットして処理開始
+            statusArea.innerHTML = '<div class="flex justify-center items-center"><div class="loader mr-3"></div><span>収集中です...AIによるフィルタリングには時間がかかります。</span></div>';
+            resultsArea.classList.add('hidden');
+            gallery.innerHTML = '';
+            downloadButtonArea.innerHTML = '';
+            resultMessage.innerHTML = '';
             submitButton.disabled = true;
             submitButton.classList.add('bg-gray-400', 'cursor-not-allowed');
             buttonText.textContent = '処理中...';
 
-
             try {
-                // --- Python(Flask)サーバーにデータを送信 ---
                 const response = await fetch('/crawl', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         keyword: keyword,
-                        max_num: max_num,
+                        max_num: maxNumInput.value,
+                        min_persons: minPersonsInput.value,
+                        max_persons: maxPersonsInput.value,
                     }),
                 });
 
-                // サーバーからの応答をJSON形式で受け取ります
                 const result = await response.json();
+                statusArea.innerHTML = ''; // ローディング表示を消す
 
                 if (response.ok) {
-                    // 成功した場合
-                    statusDiv.innerHTML = `
-                        <p class="text-green-600 font-semibold">${result.message}</p>
-                        <a href="${result.downloadUrl}" class="mt-4 inline-block bg-green-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-600 transition duration-150">
-                            ダウンロード
-                        </a>
-                    `;
+                    resultsArea.classList.remove('hidden');
+                    resultMessage.textContent = result.message;
+
+                    if (result.downloadUrl) {
+                        // ダウンロードボタンを作成
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = result.downloadUrl;
+                        downloadLink.textContent = '結果をZIPでダウンロード';
+                        downloadLink.className = 'inline-block bg-green-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-600 transition';
+                        downloadButtonArea.appendChild(downloadLink);
+                    }
+
+                    if (result.imageUrls && result.imageUrls.length > 0) {
+                        // ギャラリーに画像を表示
+                        result.imageUrls.forEach(url => {
+                            const imgContainer = document.createElement('div');
+                            imgContainer.className = 'gallery-item aspect-square bg-gray-200 rounded-lg overflow-hidden shadow';
+                            const img = document.createElement('img');
+                            img.src = url;
+                            img.className = 'w-full h-full object-cover';
+                            imgContainer.appendChild(img);
+                            gallery.appendChild(imgContainer);
+                        });
+                    }
                 } else {
-                    // エラーが発生した場合
-                    statusDiv.innerHTML = `<p class="text-red-600">エラー: ${result.message}</p>`;
+                    resultsArea.classList.remove('hidden');
+                    resultMessage.textContent = `エラー: ${result.message}`;
+                    resultMessage.classList.add('text-red-600');
                 }
 
             } catch (error) {
-                // ネットワークエラーなど、通信自体に失敗した場合
-                console.error('Fetch Error:', error);
-                statusDiv.innerHTML = '<p class="text-red-600">通信エラーが発生しました。サーバーが起動しているか確認してください。</p>';
+                statusArea.innerHTML = '<p class="text-red-600">通信エラーが発生しました。サーバーが起動しているか確認してください。</p>';
             } finally {
-                // --- 処理完了後のUIを元に戻す ---
                 submitButton.disabled = false;
                 submitButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
-                buttonText.textContent = '収集を開始';
+                buttonText.textContent = '収集とフィルタリングを開始';
             }
         });
     </script>
