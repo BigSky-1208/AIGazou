@@ -1,3 +1,6 @@
 Flask
 icrawler
 gunicorn
+ultralytics
+torch
+Pillow
