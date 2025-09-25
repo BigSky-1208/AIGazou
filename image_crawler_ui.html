@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI画像収集ツール</title>
+    <!-- Tailwind CSS を読み込んで、簡単に見た目を整えます -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 簡単なスタイル調整 */
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+
+    <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg p-8 md:p-12">
+        
+        <div class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">AI画像収集ツール</h1>
+            <p class="text-gray-500 mt-2">キーワードと枚数を入力して、画像収集を開始します。</p>
+        </div>
+
+        <!-- ここにキーワードや枚数を入力するフォームを作ります -->
+        <div class="space-y-6">
+            <div>
+                <label for="keyword" class="block text-sm font-medium text-gray-700 mb-1">検索キーワード</label>
+                <input type="text" id="keyword" name="keyword" placeholder="例: カフェにいる人々"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+            </div>
+
+            <div>
+                <label for="max_num" class="block text-sm font-medium text-gray-700 mb-1">収集する枚数</label>
+                <input type="number" id="max_num" name="max_num" value="10"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+            </div>
+
+            <div>
+                <!-- このボタンを押したら、Pythonが動くように後でしていきます -->
+                <button class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out">
+                    収集を開始
+                </button>
+            </div>
+        </div>
+
+        <!-- 処理状況を表示するエリア（今はまだ機能しません） -->
+        <div id="status" class="mt-8 text-center text-gray-600">
+            <!-- ここに「収集中...」や「完了しました」などのメッセージが表示されます -->
+        </div>
+
+    </div>
+
+</body>
+</html>
