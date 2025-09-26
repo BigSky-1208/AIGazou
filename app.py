@@ -1,4 +1,4 @@
-# --- AI画像収集ツール開発: Webアプリ版 バックエンド (Ver. 2.1) ---
+# --- AI画像収集ツール開発: Webアプリ版 バックエンド (Ver. 2.2 - バッチ処理対応) ---
 
 # 必要なライブラリを読み込みます
 from flask import Flask, request, jsonify, render_template, send_from_directory
@@ -55,7 +55,6 @@ def index():
     return render_template('image_crawler_ui.html')
 
 # --- 新機能: 収集した画像を表示するためのルート ---
-# 例: /results/20250925_153000/000001.jpg のようなURLで画像にアクセスできるようにします
 @app.route('/results/<path:subpath>')
 def serve_results(subpath):
     return send_from_directory(DOWNLOAD_FOLDER, subpath)
@@ -66,7 +65,6 @@ def crawl():
     data = request.json
     keyword = data.get('keyword')
     max_num = int(data.get('max_num', 10))
-    # UIから最小・最大人数を受け取るように変更
     min_persons = int(data.get('min_persons', 3))
     max_persons = int(data.get('max_persons', 15))
 
@@ -83,22 +81,36 @@ def crawl():
         google_crawler = GoogleImageCrawler(storage={'root_dir': save_path})
         google_crawler.crawl(keyword=keyword, max_num=max_num)
 
-        # AIフィルタリング
+        # --- ここからAIフィルタリング処理をバッチ処理に最適化 ---
         valid_images = []
         image_files = [f for f in os.listdir(save_path) if os.path.isfile(os.path.join(save_path, f))]
+        image_paths = [os.path.join(save_path, f) for f in image_files]
         total_images = len(image_files)
 
-        for filename in image_files:
-            image_path = os.path.join(save_path, filename)
-            person_count = count_persons_in_image(image_path)
-            
-            # UIから指定された人数でフィルタリング
-            if min_persons <= person_count <= max_persons:
-                valid_images.append(filename)
-            else:
-                os.remove(image_path) # 条件に合わない画像は削除
+        if total_images > 0 and model is not None:
+            print(f"{total_images}枚の画像のバッチ処理を開始します...")
+            try:
+                # AIモデルで全画像を一度に解析（バッチ処理）
+                results = model(image_paths, verbose=False)
+                print("バッチ処理が完了しました。")
+
+                # 解析結果を元に画像をフィルタリング
+                for image_file, result in zip(image_files, results):
+                    person_indices = (result.boxes.cls == 0).nonzero(as_tuple=True)[0]
+                    person_count = len(person_indices)
+                    
+                    if min_persons <= person_count <= max_persons:
+                        valid_images.append(image_file)
+                    else:
+                        os.remove(os.path.join(save_path, image_file))
+            except Exception as e:
+                print(f"AIのバッチ処理中にエラーが発生しました: {e}")
+                return jsonify({'status': 'error', 'message': f'AIの画像解析中にエラーが発生しました: {str(e)}'}), 500
+        elif model is None:
+            print("AIモデルが利用できないため、フィルタリングをスキップします。")
+            valid_images = image_files
+        # --- 最適化ここまで ---
         
-        # 有効な画像がなかった場合
         if not valid_images:
             return jsonify({
                 'status': 'success',
@@ -107,7 +119,6 @@ def crawl():
                 'downloadUrl': None
             })
 
-        # 有効な画像をZIPファイルに圧縮
         zip_filename = f"{session_id}_{keyword.replace(' ', '_')}.zip"
         zip_filepath = os.path.join(ZIP_FOLDER, zip_filename)
         
@@ -115,15 +126,13 @@ def crawl():
             for image_file in valid_images:
                 zipf.write(os.path.join(save_path, image_file), arcname=image_file)
 
-        # Webページに返すURLを生成
         download_url = f'/download_zip/{zip_filename}'
         image_urls = [f'/results/{session_id}/{filename}' for filename in valid_images]
         
-        # 正常な応答を返す
         return jsonify({
             'status': 'success',
             'message': f'{total_images}枚中 {len(valid_images)}枚の画像を収集しました。',
-            'imageUrls': image_urls, # 画像プレビュー用のURLリストを追加
+            'imageUrls': image_urls,
             'downloadUrl': download_url
         })
 
@@ -131,7 +140,6 @@ def crawl():
         return jsonify({'status': 'error', 'message': f'エラーが発生しました: {str(e)}'}), 500
 
 # --- ZIPファイルダウンロード処理 ---
-# URLを /download_zip/ に変更
 @app.route('/download_zip/<filename>')
 def download_zip_file(filename):
     return send_from_directory(ZIP_FOLDER, filename, as_attachment=True)
